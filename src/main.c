@@ -1,9 +1,9 @@
 #include "raycaster.h"
 
-int           init(t_raycaster *rc)
+int           init(t_sdl *sdl, t_raycaster *rc)
 {
-  rc->window = NULL;
-  rc->renderer = NULL;
+  sdl->window = NULL;
+  sdl->renderer = NULL;
   rc->player_pos_x = INIT_P_POS_X;
   rc->player_pos_y = INIT_P_POS_Y;
   rc->player_dir_x = INIT_P_DIR_X;
@@ -15,7 +15,7 @@ int           init(t_raycaster *rc)
     fprintf(stderr,"SDL initialization failed (%s)\n",SDL_GetError());
     return (-1);
   }
-  if (SDL_CreateWindowAndRenderer(WIN_X, WIN_Y, 0, &rc->window, &rc->renderer) != 0)
+  if (SDL_CreateWindowAndRenderer(WIN_X, WIN_Y, 0, &sdl->window, &sdl->renderer) != 0)
   {
     fprintf(stderr,"Window creation failed (%s)\n",SDL_GetError());
     return (-1);
@@ -82,14 +82,13 @@ void          perform_dda(t_raycaster *rc)
 
 void          calc_wall_height(t_raycaster *rc)
 {
-  double      perp_wall_dist;
   int         line_height;
 
   if (rc->side == 0)
-    perp_wall_dist = (rc->map_x - rc->player_pos_x + (1 - rc->step_x) / 2) / rc->ray_dir_x;
+    rc->perp_wall_dist = (rc->map_x - rc->player_pos_x + (1 - rc->step_x) / 2) / rc->ray_dir_x;
   else
-    perp_wall_dist = (rc->map_y - rc->player_pos_y + (1 - rc->step_y) / 2) / rc->ray_dir_y;
-  line_height = (int)(WIN_Y / perp_wall_dist);
+    rc->perp_wall_dist = (rc->map_y - rc->player_pos_y + (1 - rc->step_y) / 2) / rc->ray_dir_y;
+  line_height = (int)(WIN_Y / rc->perp_wall_dist);
   rc->draw_start = -line_height / 2 + WIN_Y / 2;
   if (rc->draw_start < 0)
     rc->draw_start = 0;
@@ -98,45 +97,28 @@ void          calc_wall_height(t_raycaster *rc)
     rc->draw_end = WIN_Y - 1;
 }
 
-SDL_Color     convert_color(int hexa_value)
+void          draw_vert_line(t_sdl *sdl, t_raycaster *rc, int x)
 {
   SDL_Color   color;
+  
+  color = apply_night_effect(select_wall_color(rc->map_x, rc->map_y), rc->perp_wall_dist);
 
-  color.r = ((hexa_value >> 16) & 0xFF);
-  color.g = ((hexa_value >> 8) & 0xFF);
-  color.b = ((hexa_value) & 0xFF);
-  return (color); 
-}
-
-void          draw_vert_line(t_raycaster *rc, int x)
-{
-  SDL_Color   color;
-
-  if (worldMap[rc->map_x][rc->map_y] == 1)
-    color = convert_color(RED);
-  else if (worldMap[rc->map_x][rc->map_y] == 2)
-    color = convert_color(GREEN);
-  else if (worldMap[rc->map_x][rc->map_y] == 3)
-    color = convert_color(BLUE);
-  else if (worldMap[rc->map_x][rc->map_y] == 4)
-    color = convert_color(WHITE);
-  else
-    color = convert_color(BLACK);
   if (rc->side == 1)
   {
     color.r /= 2;
     color.g /= 2;
     color.b /= 2;
   }
-  SDL_SetRenderDrawColor(rc->renderer, color.r, color.g, color.b, SDL_ALPHA_OPAQUE);
-  SDL_RenderDrawLine(rc->renderer, x, rc->draw_start, x, rc->draw_end);
+  SDL_SetRenderDrawColor(sdl->renderer, color.r, color.g, color.b, SDL_ALPHA_OPAQUE);
+  SDL_RenderDrawLine(sdl->renderer, x, rc->draw_start, x, rc->draw_end);
+
 }
 
-void          render_frame(t_raycaster *rc)
+void          render_frame(t_sdl *sdl)
 {
-  SDL_RenderPresent(rc->renderer);
-  SDL_SetRenderDrawColor(rc->renderer, 0, 0, 0, SDL_ALPHA_OPAQUE);
-  SDL_RenderClear(rc->renderer);
+  SDL_RenderPresent(sdl->renderer);
+  SDL_SetRenderDrawColor(sdl->renderer, 0, 0, 0, SDL_ALPHA_OPAQUE);
+  SDL_RenderClear(sdl->renderer);
 }
 
 int           handle_events(t_raycaster *rc)
@@ -184,7 +166,7 @@ int           handle_events(t_raycaster *rc)
   return (0);
 }
 
-void          raycaster(t_raycaster *rc)
+void          raycaster(t_sdl *sdl, t_raycaster *rc)
 {
   SDL_bool    done;
 
@@ -196,9 +178,9 @@ void          raycaster(t_raycaster *rc)
       initial_calc(rc, x);
       perform_dda(rc);
       calc_wall_height(rc);
-      draw_vert_line(rc, x);
+      draw_vert_line(sdl, rc, x);
     }
-    render_frame(rc);
+    render_frame(sdl);
     if (handle_events(rc) != 0)
       done = SDL_TRUE;
   }
@@ -206,15 +188,16 @@ void          raycaster(t_raycaster *rc)
 
 int           main()
 {
+  t_sdl       sdl;
   t_raycaster rc;
 
-  if (init(&rc) != 0)
+  if (init(&sdl, &rc) != 0)
     return (-1);
-  raycaster(&rc);
-  if (rc.renderer)
-    SDL_DestroyRenderer(rc.renderer);
-  if (rc.window)
-    SDL_DestroyWindow(rc.window);
+  raycaster(&sdl, &rc);
+  if (sdl.renderer)
+    SDL_DestroyRenderer(sdl.renderer);
+  if (sdl.window)
+    SDL_DestroyWindow(sdl.window);
   SDL_Quit();
   return (0);
 }
